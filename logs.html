@@ -269,7 +269,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo-slot">
-        <img src="logo.png.jpg" alt="Temmy Social" onerror="this.style.display='none'; this.parentNode.append('Temmy Social')">
+        <img src="logo-placeholder.png" alt="Temmy Social" onerror="this.style.display='none'; this.parentNode.append('Temmy Social')">
       </div>
     </div>
 
@@ -301,10 +301,9 @@
         <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.3 2.3-2-2 2.3-2.3Z"/></svg>
         Tools Store
       </a>
-      <a class="nav-item disabled" href="#">
+      <a class="nav-item" href="sms.html">
         <svg class="icon" viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4V4Z"/><path d="M8 9h8M8 12h5"/></svg>
         SMS Numbers
-        <span class="soon-pill">Soon</span>
       </a>
       <a class="nav-item disabled" href="#">
         <svg class="icon" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>
@@ -506,6 +505,12 @@
   const auth = getAuth(fbApp);
   const db = getFirestore(fbApp);
 
+  // These Netlify Functions can only run on Netlify itself, so this page calls
+  // them by full URL — that way the page works whether it's opened from your
+  // Netlify domain, a custom domain, or GitHub Pages. Update this if your
+  // Netlify site name ever changes.
+  const NETLIFY_FUNCTIONS_BASE = 'https://emmysocials.netlify.app/.netlify/functions';
+
   // ---------- Sidebar ----------
   const app = document.getElementById('app');
   const sidebarToggle = document.getElementById('sidebarToggle');
@@ -625,7 +630,7 @@
 
       // Section 2: merge in live Facebook categories/counts from SMvaults
       try {
-        const fbRes = await fetch('/.netlify/functions/facebook-products');
+        const fbRes = await fetch(`${NETLIFY_FUNCTIONS_BASE}/facebook-products`);
         const fbData = await fbRes.json();
         if (fbData.success) {
           fbData.products.forEach(p => {
@@ -701,7 +706,7 @@
 
       // Section 2: live Facebook products from SMvaults (via our Netlify function)
       try {
-        const fbRes = await fetch('/.netlify/functions/facebook-products');
+        const fbRes = await fetch(`${NETLIFY_FUNCTIONS_BASE}/facebook-products`);
         const fbData = await fbRes.json();
         if (fbData.success) {
           const inStock = fbData.products.filter(p => p.stock > 0);
