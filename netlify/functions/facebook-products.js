@@ -13,13 +13,24 @@
 
 const MARKUP_MULTIPLIER = 1.5; // +50%
 
-exports.handler = async function () {
+exports.handler = async function (event) {
+  const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: CORS_HEADERS, body: '' };
+  }
+
   const SMVAULTS_API_KEY = process.env.SMVAULTS_API_KEY;
 
   try {
     if (!SMVAULTS_API_KEY) {
       return {
         statusCode: 500,
+        headers: CORS_HEADERS,
         body: JSON.stringify({ success: false, error: 'Missing SMVAULTS_API_KEY environment variable' })
       };
     }
@@ -32,6 +43,7 @@ exports.handler = async function () {
     if (!usdToNgn) {
       return {
         statusCode: 502,
+        headers: CORS_HEADERS,
         body: JSON.stringify({ success: false, error: 'Could not fetch USD to NGN exchange rate' })
       };
     }
@@ -44,6 +56,7 @@ exports.handler = async function () {
     if (smData.status !== 'success' || !Array.isArray(smData.categories)) {
       return {
         statusCode: 502,
+        headers: CORS_HEADERS,
         body: JSON.stringify({ success: false, error: 'Unexpected response from SMvaults' })
       };
     }
@@ -56,6 +69,7 @@ exports.handler = async function () {
     if (!facebookCategory) {
       return {
         statusCode: 200,
+        headers: CORS_HEADERS,
         body: JSON.stringify({ success: true, exchangeRate: usdToNgn, products: [] })
       };
     }
@@ -93,7 +107,7 @@ exports.handler = async function () {
 
     return {
       statusCode: 200,
-      headers: { 'Cache-Control': 'public, max-age=120' },
+      headers: { ...CORS_HEADERS, 'Cache-Control': 'public, max-age=120' },
       body: JSON.stringify({ success: true, exchangeRate: usdToNgn, products })
     };
 
@@ -101,6 +115,7 @@ exports.handler = async function () {
     console.error('facebook-products error:', err);
     return {
       statusCode: 500,
+      headers: CORS_HEADERS,
       body: JSON.stringify({ success: false, error: 'Server error fetching Facebook products' })
     };
   }
