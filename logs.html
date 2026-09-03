@@ -623,6 +623,24 @@
         countMap[cat] = (countMap[cat] || 0) + 1;
       });
 
+      // Section 2: merge in live Facebook categories/counts from SMvaults
+      try {
+        const fbRes = await fetch('/.netlify/functions/facebook-products');
+        const fbData = await fbRes.json();
+        if (fbData.success) {
+          fbData.products.forEach(p => {
+            if (p.stock > 0) {
+              countMap[p.categoryName] = (countMap[p.categoryName] || 0) + 1;
+              if (!allCategories.find(c => c.name === p.categoryName)) {
+                allCategories.push({ id: 'sm_' + p.categoryName, name: p.categoryName, description: 'Facebook · live stock' });
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Facebook category merge skipped:', e);
+      }
+
       renderCategories(countMap);
     } catch (err) {
       console.error('Categories error:', err);
@@ -679,11 +697,19 @@
 
       const snap = await getDocs(q);
       allProducts = [];
-      snap.forEach(d => allProducts.push({ id: d.id, ...d.data() }));
+      snap.forEach(d => allProducts.push({ id: d.id, ...d.data(), source: 'firestore' }));
 
-      // ---- Section 2 placeholder: merge live external API products here ----
-      // const apiProducts = await fetchExternalLogsProducts();
-      // allProducts = allProducts.concat(apiProducts);
+      // Section 2: live Facebook products from SMvaults (via our Netlify function)
+      try {
+        const fbRes = await fetch('/.netlify/functions/facebook-products');
+        const fbData = await fbRes.json();
+        if (fbData.success) {
+          const inStock = fbData.products.filter(p => p.stock > 0);
+          allProducts = allProducts.concat(inStock);
+        }
+      } catch (e) {
+        console.warn('Facebook products fetch failed:', e);
+      }
 
       let filtered = allProducts;
       if (categoryFilter !== 'all') {
@@ -707,7 +733,7 @@
             <div class="product-info">
               <div class="product-top">
                 <div class="product-title">${p.title || 'Product'}</div>
-                <div class="product-sku">${p.sku || '#' + p.id.slice(0,6)}</div>
+                <div class="product-sku">${p.sku || (p.source === 'smvaults' ? '#' + p.sourceId : '#' + p.id.slice(0,6))}</div>
               </div>
               <div class="product-price">${fmtNaira(p.price || 0)}</div>
               <div class="product-desc">${p.description || ''}</div>
@@ -813,20 +839,54 @@
         return;
       }
 
-      await updateDoc(userRef, {
-        balance: increment(-p.price),
-        totalPurchases: increment(1)
-      });
+      let credentialText;
+      let referenceId;
 
-      const productRef = doc(db, 'products', p.id);
-      await updateDoc(productRef, { stock: increment(-1) });
+      if (p.source === 'smvaults') {
+        // Facebook product: place the order with the supplier first (key stays server-side)
+        const buyRes = await fetch('/.netlify/functions/facebook-purchase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceId: p.sourceId, quantity: 1 })
+        });
+        const buyData = await buyRes.json();
+
+        if (!buyData.success) {
+          alert(buyData.error || 'Purchase failed. Please try again.');
+          btn.textContent = 'Buy Now';
+          btn.disabled = false;
+          return;
+        }
+
+        credentialText = Array.isArray(buyData.data) ? buyData.data.join('\n') : (buyData.data || 'No credential available');
+        referenceId = buyData.transId ? ('SM-' + buyData.transId) : ('ORD-' + Date.now().toString(36).toUpperCase());
+
+        // Stock lives with the supplier, not Firestore, so only the balance is deducted here
+        await updateDoc(userRef, {
+          balance: increment(-p.price),
+          totalPurchases: increment(1)
+        });
+
+      } else {
+        // Local Firestore product: original flow, unchanged
+        credentialText = p.credential || 'No credential provided';
+        referenceId = 'ORD-' + Date.now().toString(36).toUpperCase();
+
+        await updateDoc(userRef, {
+          balance: increment(-p.price),
+          totalPurchases: increment(1)
+        });
+
+        const productRef = doc(db, 'products', p.id);
+        await updateDoc(productRef, { stock: increment(-1) });
+      }
 
       await addDoc(collection(db, 'orders'), {
         userId: currentUser.uid,
         productId: p.id,
         productName: p.title,
         amount: p.price,
-        credential: p.credential || 'No credential provided',
+        credential: credentialText,
         status: 'completed',
         createdAt: serverTimestamp()
       });
@@ -837,7 +897,7 @@
         productName: p.title,
         amount: -p.price,
         status: 'completed',
-        reference: 'ORD-' + Date.now().toString(36).toUpperCase(),
+        reference: referenceId,
         createdAt: serverTimestamp()
       });
 
@@ -850,7 +910,7 @@
       });
 
       document.getElementById('credentialSection').style.display = 'block';
-      document.getElementById('credentialBox').textContent = p.credential || 'No credential available';
+      document.getElementById('credentialBox').textContent = credentialText;
       btn.style.display = 'none';
 
       const actions = document.getElementById('confirmActions');
