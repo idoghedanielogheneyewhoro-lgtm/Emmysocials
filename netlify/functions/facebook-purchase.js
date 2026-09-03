@@ -8,16 +8,27 @@
 // Expects a POST body: { "sourceId": "11085", "quantity": 1, "coupon": "" }
 
 exports.handler = async function (event) {
+  const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: CORS_HEADERS, body: '' };
+  }
+
   const SMVAULTS_API_KEY = process.env.SMVAULTS_API_KEY;
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ success: false, error: 'Method not allowed' }) };
+    return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Method not allowed' }) };
   }
 
   try {
     if (!SMVAULTS_API_KEY) {
       return {
         statusCode: 500,
+        headers: CORS_HEADERS,
         body: JSON.stringify({ success: false, error: 'Missing SMVAULTS_API_KEY environment variable' })
       };
     }
@@ -26,12 +37,12 @@ exports.handler = async function (event) {
     try {
       payload = JSON.parse(event.body || '{}');
     } catch (e) {
-      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Invalid request body' }) };
+      return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Invalid request body' }) };
     }
 
     const { sourceId, quantity, coupon } = payload;
     if (!sourceId || !quantity) {
-      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Missing sourceId or quantity' }) };
+      return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Missing sourceId or quantity' }) };
     }
 
     const form = new URLSearchParams();
@@ -52,12 +63,14 @@ exports.handler = async function (event) {
     if (smData.status !== 'success') {
       return {
         statusCode: 200,
+        headers: CORS_HEADERS,
         body: JSON.stringify({ success: false, error: smData.msg || 'Purchase failed at supplier' })
       };
     }
 
     return {
       statusCode: 200,
+      headers: CORS_HEADERS,
       body: JSON.stringify({
         success: true,
         transId: smData.trans_id || null,
@@ -68,6 +81,7 @@ exports.handler = async function (event) {
 
   } catch (err) {
     console.error('facebook-purchase error:', err);
-    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'Server error placing order' }) };
+    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Server error placing order' }) };
   }
 };
+
